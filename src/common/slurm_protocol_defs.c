@@ -725,6 +725,16 @@ extern void slurm_free_kill_job_msg(kill_job_msg_t * msg)
 	}
 }
 
+void inline slurm_free_sim_job_msg(sim_job_msg_t *msg)
+{
+       xfree(msg);
+}
+
+void inline slurm_free_sim_helper_msg(sim_helper_msg_t *msg)
+{
+       xfree(msg);
+}
+
 extern void slurm_free_signal_job_msg(signal_job_msg_t * msg)
 {
 	xfree(msg);
@@ -2745,6 +2755,11 @@ extern int slurm_free_msg_data(slurm_msg_type_t type, void *data)
 	case REQUEST_FRONT_END_INFO:
 		slurm_free_front_end_info_request_msg(data);
 		break;
+	case REQUEST_SIM_JOB:
+		slurm_free_sim_job_msg(data);
+		break;
+	case MESSAGE_SIM_HELPER_CYCLE:
+		slurm_free_sim_helper_msg(data);
 	case REQUEST_SUSPEND:
 	case SRUN_REQUEST_SUSPEND:
 		slurm_free_suspend_msg(data);

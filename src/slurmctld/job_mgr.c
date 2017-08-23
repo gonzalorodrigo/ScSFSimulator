@@ -523,7 +523,7 @@ int dump_all_job_state(void)
 	new_file = xstrdup(slurmctld_conf.state_save_location);
 	xstrcat(new_file, "/job_state.new");
 	unlock_slurmctld(job_read_lock);
-
+#ifndef SLURM_SIMULATOR
 	if (stat(reg_file, &stat_buf) == 0) {
 		static time_t last_mtime = (time_t) 0;
 		int delta_t = difftime(stat_buf.st_mtime, last_mtime);
@@ -538,7 +538,7 @@ int dump_all_job_state(void)
 		}
 		last_mtime = time(NULL);
 	}
-
+#endif
 	lock_state_files();
 	log_fd = creat(new_file, 0600);
 	if (log_fd < 0) {

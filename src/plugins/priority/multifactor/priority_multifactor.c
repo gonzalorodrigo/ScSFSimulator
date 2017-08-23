@@ -76,6 +76,9 @@
 
 #include "src/slurmctld/locks.h"
 
+#include "src/unittests_lib/tools.h"
+
+
 #define SECS_PER_DAY	(24 * 60 * 60)
 #define SECS_PER_WEEK	(7 * SECS_PER_DAY)
 
@@ -101,6 +104,7 @@ uint16_t part_max_priority = 0;
 slurm_ctl_conf_t slurmctld_conf;
 #endif
 
+static void _my_sleep_prio(int secs);
 /*
  * These variables are required by the generic plugin interface.  If they
  * are not found in the plugin, the plugin loader will ignore it.
@@ -606,6 +610,16 @@ static void _get_priority_factors(time_t start_time, struct job_record *job_ptr)
 			} else
 				job_ptr->prio_factors->priority_age = 1.0;
 		}
+//		markerep("PRIO FACTORS(%d, %s): "
+//			"start_time(%d), use_time(%d), diff(%d), max_age(%d), "
+//			"submit_time(%d), begin_time(%d) => age: set(%f), value(%f)",
+//			job_ptr->job_id,job_ptr->name,
+//			start_time, use_time, diff, max_age,
+//			job_ptr->details->submit_time,
+//			job_ptr->details->begin_time,
+//			job_ptr->prio_factors->priority_age,
+//			((double)diff / (double)max_age)
+//			);
 	}
 
 	if (job_ptr->assoc_ptr && weight_fs) {
@@ -728,6 +742,19 @@ static uint32_t _get_priority_internal(time_t start_time,
 		+ job_ptr->prio_factors->priority_qos
 		- (double)(job_ptr->prio_factors->nice - NICE_OFFSET);
 
+//	markerep("PRIO CALCULATION(%d, %s): "
+//			"  age(%f), fs(%f), js(%f), part(%f), qos(%f), nice(%d) "
+//			"  nice_offset(%d) => before(%d), after(%f) "
+//			"  time_submit: %d",
+//			job_ptr->job_id,job_ptr->name,
+//			job_ptr->prio_factors->priority_age,
+//			job_ptr->prio_factors->priority_fs,
+//			job_ptr->prio_factors->priority_js,
+//			job_ptr->prio_factors->priority_part,
+//			job_ptr->prio_factors->priority_qos,
+//			job_ptr->prio_factors->nice,
+//			NICE_OFFSET, job_ptr->priority, priority,
+//			job_ptr->details->submit_time);
 	if (job_ptr->part_ptr_list) {
 		struct part_record *part_ptr;
 		double priority_part;
@@ -1413,13 +1440,31 @@ static void *_decay_thread(void *no_data)
 		now = time(NULL);
 		double elapsed = difftime(now, start_time);
 		if (elapsed < calc_period) {
-			sleep(calc_period - elapsed);
+			_my_sleep_prio(calc_period - elapsed);
 			start_time = time(NULL);
 		} else
 			start_time = now;
 		/* repeat ;) */
 	}
 	return NULL;
+}
+
+static void _my_sleep_prio(int secs)
+{
+#ifndef SLURM_SIMULATOR
+	sleep(secs);
+#else
+	/* Since the backfill and time controling loops are synced, we cannot make
+	 * the sleep depend on "faked time", because it does not change while the
+	 * backfilling is running... and _my_sleep is called form in there.
+	 */
+	if (secs==0)
+		return;
+	time_t target_time=time(NULL)+secs;
+	while (time(NULL)<target_time)
+		usleep(10);
+
+#endif
 }
 
 /* Selects the specific jobs that the user wanted to see

@@ -352,6 +352,8 @@ void *agent(void *args)
 	pthread_cond_broadcast(&agent_cnt_cond);
 	slurm_mutex_unlock(&agent_cnt_mutex);
 
+	pthread_exit(NULL);
+
 	return NULL;
 }
 
@@ -523,7 +525,7 @@ static void _update_wdog_state(thd_t *thread_ptr,
  * IN args - pointer to agent_info_t with info on threads to watch
  * Sleep between polls with exponential times (from 0.125 to 1.0 second)
  */
-static void *_wdog(void *args)
+void *_wdog(void *args)
 {
 	bool srun_agent = false;
 	int i;
@@ -554,8 +556,11 @@ static void *_wdog(void *args)
 		thd_comp.no_resp_cnt = 0;   /* assume all threads respond */
 		thd_comp.retry_cnt   = 0;   /* assume no required retries */
 		thd_comp.now         = time(NULL);
-
+#ifndef SLURM_SIMULATOR
 		usleep(usec);
+#else
+		sleep(1);
+#endif
 		usec = MIN((usec * 2), 1000000);
 
 		slurm_mutex_lock(&agent_ptr->thread_mutex);
@@ -600,6 +605,9 @@ static void *_wdog(void *args)
 		debug2("agent maximum delay %d seconds", thd_comp.max_delay);
 
 	slurm_mutex_unlock(&agent_ptr->thread_mutex);
+
+	pthread_exit(NULL);
+
 	return (void *) NULL;
 }
 
@@ -730,6 +738,7 @@ static void _notify_slurmctld_nodes(agent_info_t *agent_ptr,
 finished:	;
 	}
 	unlock_slurmctld(node_write_lock);
+#ifndef SLURM_SIMULATOR
 	if (run_scheduler) {
 		run_scheduler = false;
 		/* below functions all have their own locking */
@@ -738,6 +747,7 @@ finished:	;
 			schedule_node_save();
 		}
 	}
+#endif
 	if ((agent_ptr->msg_type == REQUEST_PING) ||
 	    (agent_ptr->msg_type == REQUEST_HEALTH_CHECK) ||
 	    (agent_ptr->msg_type == REQUEST_ACCT_GATHER_UPDATE) ||
@@ -1037,6 +1047,9 @@ cleanup:
 	(*threads_active_ptr)--;
 	pthread_cond_signal(thread_cond_ptr);
 	slurm_mutex_unlock(thread_mutex_ptr);
+
+	pthread_exit(NULL);
+
 	return (void *) NULL;
 }
 

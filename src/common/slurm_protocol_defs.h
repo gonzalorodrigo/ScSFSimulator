@@ -292,6 +292,9 @@ typedef enum {
 	REQUEST_CHECKPOINT_COMP,
 	REQUEST_CHECKPOINT_TASK_COMP,
 	RESPONSE_CHECKPOINT_COMP,
+	REQUEST_SIM_JOB,
+        RESPONSE_SIM_JOB,
+        MESSAGE_SIM_HELPER_CYCLE,
 	REQUEST_SUSPEND,
 	RESPONSE_SUSPEND,
 	REQUEST_STEP_COMPLETE,
@@ -1066,6 +1069,16 @@ typedef struct {
 } spank_env_responce_msg_t;
 
 typedef struct slurm_ctl_conf slurm_ctl_conf_info_msg_t;
+
+typedef struct sim_job_msg {
+        uint32_t job_id;
+        uint32_t duration;
+} sim_job_msg_t;
+
+typedef struct sim_helper_msg {
+        uint32_t total_jobs_ended;
+} sim_helper_msg_t;
+
 /*****************************************************************************\
  *	SLURM MESSAGE INITIALIZATION
 \*****************************************************************************/

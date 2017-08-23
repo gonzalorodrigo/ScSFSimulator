@@ -5,6 +5,8 @@ AUTOMAKE_OPTIONS = foreign
 
 sbin_PROGRAMS = slurmd
 
+LIBS = @LIBS@ -lyajl -lcgraph -lrt
+
 AM_CPPFLAGS = -DLIBSLURM_SO=\"$(libdir)/libslurm.so\" \
 	-I$(top_srcdir) $(HWLOC_CPPFLAGS)
 

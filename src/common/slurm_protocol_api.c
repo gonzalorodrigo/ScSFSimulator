@@ -2328,7 +2328,7 @@ slurm_fd_t slurm_open_controller_conn(slurm_addr_t *addr)
 #endif
 	for (retry = 0; retry < max_retry_period; retry++) {
 		if (retry)
-			sleep(1);
+                        usleep(1000);
 		if (working_cluster_rec) {
 			if (working_cluster_rec->control_addr.sin_port == 0) {
 				slurm_set_addr(
@@ -3667,6 +3667,7 @@ int slurm_send_recv_controller_msg(slurm_msg_t *req, slurm_msg_t *resp)
 	slurm_conf_unlock();
 
 	while (retry) {
+                struct timespec waiting;
 		/* If the backup controller is in the process of assuming
 		 * control, we sleep and retry later */
 		retry = 0;
@@ -3687,7 +3688,9 @@ int slurm_send_recv_controller_msg(slurm_msg_t *req, slurm_msg_t *resp)
 			debug("Neither primary nor backup controller "
 			      "responding, sleep and retry");
 			slurm_free_return_code_msg(resp->data);
-			sleep(30);
+                        waiting.tv_sec = 30;
+                        waiting.tv_nsec = 0;
+                        nanosleep(&waiting, 0);
 			if ((fd = slurm_open_controller_conn(&ctrl_addr))
 			    < 0) {
 				rc = -1;

@@ -1615,6 +1615,7 @@ extern void launch_job(struct job_record *job_ptr)
 	if (launch_msg_ptr == NULL)
 		return;
 
+#ifndef SLURM_SIMULATOR
 	agent_arg_ptr = (agent_arg_t *) xmalloc(sizeof(agent_arg_t));
 	agent_arg_ptr->protocol_version = protocol_version;
 	agent_arg_ptr->node_count = 1;
@@ -1626,6 +1627,45 @@ extern void launch_job(struct job_record *job_ptr)
 
 	/* Launch the RPC via agent */
 	agent_queue_request(agent_arg_ptr);
+#else
+
+        {
+                slurm_msg_t msg, resp;
+                slurm_msg_t_init(&msg);
+                msg.msg_type = REQUEST_BATCH_JOB_LAUNCH;
+                msg.data = launch_msg_ptr;
+                info("SIM: sending message type REQUEST_BATCH_JOB_LAUNCH to %s\n", job_ptr->batch_host);
+
+                if(slurm_conf_get_addr(job_ptr->batch_host, &msg.address) == SLURM_ERROR) {
+                                error("SIM: "
+                                      "can't find address for host %s, "
+                                      "check slurm.conf",
+                                      job_ptr->batch_host);
+                }
+
+                if (slurm_send_recv_node_msg(&msg, &resp, 5000000) != SLURM_SUCCESS) {
+                                error("SIM: slurm_send_only_node_msg failed\n");
+                } else {
+                	if (resp.data) {
+						xfree(resp.data);
+					}
+					if (resp.auth_cred)
+						g_slurm_auth_destroy(resp.auth_cred);
+                }
+
+                /* Let's free memory allocated */
+
+                if(launch_msg_ptr->environment){
+                        xfree(launch_msg_ptr->environment[0]);
+                        xfree(launch_msg_ptr->environment);
+                }
+                g_slurm_auth_destroy(msg.auth_cred);
+                slurm_free_job_launch_msg(launch_msg_ptr);
+
+
+
+        }
+#endif
 }
 
 /*
@@ -2671,6 +2711,9 @@ static void *_run_epilog(void *arg)
 		xfree(epilog_arg->my_env[i]);
 	xfree(epilog_arg->my_env);
 	xfree(epilog_arg);
+
+	pthread_exit(NULL);
+
 	return NULL;
 }
 
@@ -2834,6 +2877,8 @@ static void *_run_prolog(void *arg)
 	}
 	unlock_slurmctld(config_read_lock);
 	FREE_NULL_BITMAP(node_bitmap);
+
+	pthread_exit(NULL);
 
 	return NULL;
 }

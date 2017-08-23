@@ -1,4 +1,4 @@
-SUBDIRS = cray lua pam perlapi torque sgather sjobexit slurmdb-direct pmi2
+SUBDIRS = cray lua pam perlapi torque sgather sjobexit slurmdb-direct pmi2 simulator
 
 EXTRA_DIST = \
 	env_cache_builder.c	\
@@ -7,6 +7,7 @@ EXTRA_DIST = \
 	mpich1.slurm.patch	\
 	ptrace.patch		\
 	sgather			\
+	simulator		\
 	skilling.c		\
 	sjstat			\
 	spank_core.c		\

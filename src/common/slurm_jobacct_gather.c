@@ -1045,6 +1045,17 @@ extern void jobacctinfo_pack(jobacctinfo_t *jobacct,
 				_pack_jobacct_id(NULL, rpc_version, buffer);
 			return;
 		}
+#ifdef SLURM_SIMULATOR
+		for (i = 0; i < 6; i++)
+			pack64(0, buffer);
+		for (i = 0; i < 8; i++)
+			pack32((uint32_t) 0, buffer);
+		for (i = 0; i < 4; i++)
+			packdouble((double) 0, buffer);
+		for (i = 0; i < 6; i++)
+			_pack_jobacct_id(NULL, rpc_version, buffer);
+		return;
+#endif
 
 		pack32((uint32_t)jobacct->user_cpu_sec, buffer);
 		pack32((uint32_t)jobacct->user_cpu_usec, buffer);
