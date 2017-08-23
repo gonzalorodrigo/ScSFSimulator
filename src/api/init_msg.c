@@ -98,6 +98,7 @@ void slurm_init_job_desc_msg(job_desc_msg_t * job_desc_msg)
 	job_desc_msg->user_id		= NO_VAL;
 	job_desc_msg->wait_all_nodes	= (uint16_t) NO_VAL;
 	job_desc_msg->wait4switch	= NO_VAL;
+	job_desc_msg->wf_program 	= NULL;
 }
 
 /*

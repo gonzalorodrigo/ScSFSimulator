@@ -69,6 +69,9 @@ static void  _env_merge_filter(job_desc_msg_t *desc);
 static int   _fill_job_desc_from_opts(job_desc_msg_t *desc);
 static int   _check_cluster_specific_settings(job_desc_msg_t *desc);
 static void *_get_script_buffer(const char *filename, int *size);
+#ifdef WF_API
+static char *_get_wf_program_buffer(const char *filename, uint32_t *size);
+#endif
 static char *_script_wrap(char *command_string);
 static void  _set_exit_code(void);
 static void  _set_prio_process_env(void);
@@ -332,6 +335,9 @@ static int _fill_job_desc_from_opts(job_desc_msg_t *desc)
 {
 	int i;
 	extern char **environ;
+#ifdef WF_API
+	uint32_t program_size = 0;
+#endif
 
 	if (opt.jobid_set)
 		desc->job_id = opt.jobid;
@@ -532,6 +538,18 @@ static int _fill_job_desc_from_opts(job_desc_msg_t *desc)
 		desc->req_switch = opt.req_switch;
 	if (opt.wait4switch >= 0)
 		desc->wait4switch = opt.wait4switch;
+#ifdef WF_API
+	/* Check if there is a workflow manifest and put it in the job
+	 * description.
+	 */
+	if (opt.wf_program_file!=NULL) {
+		desc->wf_program = _get_wf_program_buffer(opt.wf_program_file,
+												  &program_size);
+		if (program_size<=0) {
+			desc->wf_program = NULL;
+		}
+	}
+#endif
 
 
 	return 0;
@@ -763,6 +781,78 @@ fail:
 	return NULL;
 }
 
+#ifdef WF_API
+/*
+ * Reads WF program description and do some sanity checks.
+ */
+static char *_get_wf_program_buffer(const char *filename, uint32_t *size)
+{
+	int fd;
+	char *buf = NULL;
+	int buf_size = BUFSIZ;
+	int buf_left;
+	int script_size = 0;
+	char *ptr = NULL;
+	int tmp_size;
+
+	/*
+	 * First figure out whether we are reading from STDIN_FILENO
+	 * or from a file.
+	 */
+
+	fd = open(filename, O_RDONLY);
+	if (fd == -1) {
+		error("Unable to open file %s", filename);
+		goto fail;
+	}
+
+
+	/*
+	 * Then read in the script.
+	 */
+	buf = ptr = xmalloc(buf_size);
+	buf_left = buf_size;
+	while((tmp_size = read(fd, ptr, buf_left)) > 0) {
+		buf_left -= tmp_size;
+		script_size += tmp_size;
+		if (buf_left == 0) {
+			buf_size += BUFSIZ;
+			xrealloc(buf, buf_size);
+		}
+		ptr = buf + script_size;
+		buf_left = buf_size - script_size;
+	}
+	if (filename)
+		close(fd);
+
+	/*
+	 * Finally we perform some sanity tests on the script.
+	 */
+	if (script_size == 0) {
+		error("Batch script is empty!");
+		goto fail;
+	} else if (xstring_is_whitespace(buf)) {
+		error("Batch script contains only whitespace!");
+		goto fail;
+	} else if (contains_null_char(buf, script_size)) {
+		error("The SLURM controller does not allow scripts that");
+		error("contain a NULL character '\\0'.");
+		goto fail;
+	} else if (contains_dos_linebreak(buf, script_size)) {
+		error("Batch script contains DOS line breaks (\\r\\n)");
+		error("instead of expected UNIX line breaks (\\n).");
+		goto fail;
+	}
+
+	*size = script_size;
+	return buf;
+fail:
+	xfree(buf);
+	*size = 0;
+	return NULL;
+}
+#endif
+
 /* Wrap a single command string in a simple shell script */
 static char *_script_wrap(char *command_string)
 {
@@ -840,3 +930,4 @@ static int _set_rlimit_env(void)
 
 	return rc;
 }
+

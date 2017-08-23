@@ -195,6 +195,11 @@ enum {
 	ESLURM_INVALID_ARRAY,
 	ESLURM_RESERVATION_NAME_DUP,
 	ESLURM_TRIGGER_DUP,
+#ifdef WF_API
+	ESLURM_FAILED_PARSING_WF_MANIFEST,
+#endif
+
+
 
 	/* switch specific error codes, specific values defined in plugin module */
 	ESLURM_SWITCH_MIN = 3000,

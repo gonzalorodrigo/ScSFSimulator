@@ -442,6 +442,8 @@ extern void slurm_free_job_desc_msg(job_desc_msg_t * msg)
 		xfree(msg->spank_job_env);
 		xfree(msg->wckey);
 		xfree(msg->work_dir);
+		if (msg->wf_program)
+			xfree(msg->wf_program);
 		xfree(msg);
 	}
 }

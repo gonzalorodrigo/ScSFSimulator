@@ -82,6 +82,9 @@
 #include "src/slurmctld/slurmctld.h"
 #include "src/slurmctld/srun_comm.h"
 #include "src/slurmctld/sched_plugin.h"
+#ifdef WF_API
+#include "src/slurmctld/wf_program.h"
+#endif
 
 #define _DEBUG 0
 #define MAX_FAILED_RESV 10
@@ -746,6 +749,9 @@ extern int schedule(uint32_t job_limit)
 	static time_t sched_update = 0;
 	static bool wiki_sched = false;
 	static bool fifo_sched = false;
+#ifdef WF_API
+	static bool wf_backfill_sched = false;
+#endif
 	static int sched_timeout = 0;
 	static int def_job_limit = 100;
 	static int max_jobs_per_part = 0;
@@ -774,6 +780,12 @@ extern int schedule(uint32_t job_limit)
 			fifo_sched = true;
 		else
 			fifo_sched = false;
+#ifdef WF_API
+		if (strcmp(sched_type, "sched/wfbackfill") == 0) {
+			wf_backfill_sched = true;
+		}
+		error("SCHED TYPE: %s", sched_type);
+#endif
 		/* Disable avoiding of fragmentation with sched/wiki */
 		if ((strcmp(sched_type, "sched/wiki") == 0) ||
 		    (strcmp(sched_type, "sched/wiki2") == 0))
@@ -856,6 +868,11 @@ extern int schedule(uint32_t job_limit)
 		     def_job_limit, defer_rpc_cnt, sched_timeout,
 		     max_jobs_per_part);
 	}
+
+	if (fifo_sched)
+		info("YES WE FIFO");
+	else
+		info("NO WE DON'TFIFO");
 
 	if ((defer_rpc_cnt > 0) &&
 	    (slurmctld_config.server_thread_count >= defer_rpc_cnt)) {
@@ -944,6 +961,11 @@ extern int schedule(uint32_t job_limit)
 		slurmctld_diag_stats.schedule_queue_len = list_count(job_list);
 		job_iterator = list_iterator_create(job_list);
 	} else {
+#ifdef WF_API
+		if (wf_backfill_sched) {
+			decompress_workflows();
+		}
+#endif
 		job_queue = build_job_queue(false, false);
 		slurmctld_diag_stats.schedule_queue_len = list_count(job_queue);
 		sort_job_queue(job_queue);
@@ -984,6 +1006,7 @@ next_part:			part_ptr = (struct part_record *)
 					continue;
 			}
 		} else {
+			// Gonzalo: get the job to be scheduled.
 			job_queue_rec = list_pop(job_queue);
 			if (!job_queue_rec)
 				break;
@@ -1000,6 +1023,7 @@ next_part:			part_ptr = (struct part_record *)
 				continue;  /* started in another partition */
 			job_ptr->part_ptr = part_ptr;
 		}
+		// Gonzalo: Checking reasons not to schedule
 		if (job_ptr->preempt_in_progress)
 			continue;	/* scheduled in another partition */
 		if ((time(NULL) - sched_start) >= sched_timeout) {
@@ -1019,6 +1043,7 @@ next_part:			part_ptr = (struct part_record *)
 			reject_array_job_id = job_ptr->array_job_id;
 			reject_array_part   = job_ptr->part_ptr;
 		}
+		// Gonzalo: Check that max jobs per partition has not been reached.
 		if (max_jobs_per_part) {
 			bool skip_job = false;
 			for (j = 0; j < part_cnt; j++) {
@@ -1042,11 +1067,13 @@ next_part:			part_ptr = (struct part_record *)
 				continue;
 			}
 		}
+		// Gonzalo: Check that we have not scheduled too many jobs already.
 		if (job_depth++ > job_limit) {
 			debug("sched: already tested %u jobs, breaking out",
 			       job_depth);
 			break;
 		}
+		// Gonzalo: Check that there is not a lot of pending work (RPC)
 		if ((defer_rpc_cnt > 0) &&
 		     (slurmctld_config.server_thread_count >= defer_rpc_cnt)) {
 			debug("sched: schedule() returning, too many RPCs");
@@ -1055,6 +1082,7 @@ next_part:			part_ptr = (struct part_record *)
 
 		slurmctld_diag_stats.schedule_cycle_depth++;
 
+		// Gonzalo: Don't schedule if it has a reservation
 		if (job_ptr->resv_name) {
 			bool found_resv = false;
 			for (i = 0; i < failed_resv_cnt; i++) {
@@ -1076,6 +1104,7 @@ next_part:			part_ptr = (struct part_record *)
 				       job_ptr->priority, job_ptr->resv_name);
 				continue;
 			}
+		// Gonzalo: Don't schedule if the partition is reserved
 		} else if (_failed_partition(job_ptr->part_ptr, failed_parts,
 					     failed_part_cnt)) {
 			if ((job_ptr->state_reason == WAIT_NODE_NOT_AVAIL) ||
@@ -1139,10 +1168,12 @@ next_part:			part_ptr = (struct part_record *)
 			}
 		}
 
+		// Gonzalo: do QOS policies allow job to run?
 		if (!acct_policy_job_runnable_state(job_ptr) &&
 		    !acct_policy_job_runnable_pre_select(job_ptr))
 			continue;
 
+		// Gonzalo: Check if resources are still not available.
 		if ((job_ptr->state_reason == WAIT_NODE_NOT_AVAIL) &&
 		    job_ptr->details && job_ptr->details->req_node_bitmap &&
 		    !bit_super_set(job_ptr->details->req_node_bitmap,
@@ -1150,6 +1181,7 @@ next_part:			part_ptr = (struct part_record *)
 			continue;
 		}
 
+		// Gonzalo: Check if the available nodes are enough (min_nodes)
 		i = bit_overlap(avail_node_bitmap,
 				job_ptr->part_ptr->node_bitmap);
 		if ((job_ptr->details &&
@@ -1170,6 +1202,7 @@ next_part:			part_ptr = (struct part_record *)
 			       job_ptr->partition);
 			continue;
 		}
+		// Gonzalo: Check if the licences is ready (if required)
 		if (license_job_test(job_ptr, time(NULL)) != SLURM_SUCCESS) {
 			job_ptr->state_reason = WAIT_LICENSES;
 			xfree(job_ptr->state_desc);
@@ -1182,7 +1215,7 @@ next_part:			part_ptr = (struct part_record *)
 			       job_ptr->priority);
 			continue;
 		}
-
+		// Gonzalo: Re-check that user account is still available.
 		if (assoc_mgr_validate_assoc_id(acct_db_conn,
 						job_ptr->assoc_id,
 						accounting_enforce)) {
@@ -1197,7 +1230,7 @@ next_part:			part_ptr = (struct part_record *)
 			xfree(job_ptr->state_desc);
 			continue;
 		}
-
+		// Gonzalo: Test if job can run (if free resources)
 		error_code = select_nodes(job_ptr, false, NULL);
 		if (error_code == ESLURM_NODES_BUSY) {
 			debug3("sched: JobId=%u. State=%s. Reason=%s. "
@@ -1301,10 +1334,18 @@ next_part:			part_ptr = (struct part_record *)
 			     job_ptr->job_id, job_ptr->nodes,
 			     job_ptr->total_cpus);
 #endif
+			// Gonzalo: Run the job!
 			if (job_ptr->batch_flag == 0)
 				srun_allocate(job_ptr->job_id);
 			else if (job_ptr->details->prolog_running == 0)
+			{
+#ifdef WF_API
+				if (wf_backfill_sched) {
+					do_permament_if_decompressed_job(job_ptr->job_id);
+				}
+#endif
 				launch_job(job_ptr);
+			}
 			rebuild_job_part_list(job_ptr);
 			job_cnt++;
 			reject_array_job_id = 0;
@@ -1351,6 +1392,11 @@ next_part:			part_ptr = (struct part_record *)
 			list_iterator_destroy(part_iterator);
 	} else if (job_queue) {
 		FREE_NULL_LIST(job_queue);
+#ifdef WF_API
+		if (wf_backfill_sched) {
+			compress_workflows();
+		}
+#endif
 	}
 	xfree(sched_part_ptr);
 	xfree(sched_part_jobs);

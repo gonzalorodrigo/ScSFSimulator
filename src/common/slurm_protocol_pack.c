@@ -6707,6 +6707,9 @@ _pack_job_desc_msg(job_desc_msg_t * job_desc_ptr, Buf buffer,
 
 	/* load the data values */
 	if (protocol_version >= SLURM_14_03_PROTOCOL_VERSION) {
+#ifdef WF_API
+		packstr(job_desc_ptr->wf_program, buffer);
+#endif
 		pack16(job_desc_ptr->contiguous, buffer);
 		pack16(job_desc_ptr->core_spec, buffer);
 		pack16(job_desc_ptr->task_dist, buffer);
@@ -7178,6 +7181,9 @@ _unpack_job_desc_msg(job_desc_msg_t ** job_desc_buffer_ptr, Buf buffer,
 		*job_desc_buffer_ptr = job_desc_ptr;
 
 		/* load the data values */
+#ifdef WF_API
+		safe_unpackstr_xmalloc(&job_desc_ptr->wf_program, &uint32_tmp, buffer);
+#endif
 		safe_unpack16(&job_desc_ptr->contiguous, buffer);
 		safe_unpack16(&job_desc_ptr->core_spec, buffer);
 		safe_unpack16(&job_desc_ptr->task_dist, buffer);

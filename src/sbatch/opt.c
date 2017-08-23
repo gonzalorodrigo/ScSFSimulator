@@ -702,6 +702,9 @@ static struct option long_options[] = {
 	{"verbose",       no_argument,       0, 'v'},
 	{"version",       no_argument,       0, 'V'},
 	{"nodelist",      required_argument, 0, 'w'},
+#ifdef WF_API
+	{"wfprogram",     required_argument, 0, 'W'},
+#endif
 	{"exclude",       required_argument, 0, 'x'},
 	{"acctg-freq",    required_argument, 0, LONG_OPT_ACCTG_FREQ},
 	{"begin",         required_argument, 0, LONG_OPT_BEGIN},
@@ -765,9 +768,13 @@ static struct option long_options[] = {
 	{"test-only",     no_argument,       0, LONG_OPT_TEST_ONLY},
 	{NULL,            0,                 0, 0}
 };
-
+#ifdef WF_API
 static char *opt_string =
-	"+ba:A:B:c:C:d:D:e:F:g:hHi:IJ:kL:m:M:n:N:o:Op:P:QRsS:t:uU:vVw:x:";
+		"+ba:A:B:c:C:d:D:e:F:g:hHi:IJ:kL:m:M:n:N:o:Op:P:QRsS:t:uU:vVw:x:W:";
+#else
+static char *opt_string =
+		"+ba:A:B:c:C:d:D:e:F:g:hHi:IJ:kL:m:M:n:N:o:Op:P:QRsS:t:uU:vVw:x:";
+#endif
 char *pos_delimit;
 
 
@@ -1337,6 +1344,12 @@ static void _set_options(int argc, char **argv)
 			xfree(opt.nodelist);
 			opt.nodelist = xstrdup(optarg);
 			break;
+#ifdef WF_API
+		case 'W':
+			xfree(opt.wf_program_file);
+			opt.wf_program_file = xstrdup(optarg);
+			break;
+#endif
 		case 'x':
 			xfree(opt.exc_nodes);
 			opt.exc_nodes = xstrdup(optarg);

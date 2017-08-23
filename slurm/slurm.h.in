@@ -1196,6 +1196,9 @@ typedef struct job_descriptor {	/* For submit, allocate, and update requests */
 	char *std_out;		/* pathname of stdout */
 	uint32_t wait4switch;   /* Maximum time to wait for minimum switches */
 	char *wckey;            /* wckey for job */
+#ifdef WF_API
+        char *wf_program;
+#endif
 } job_desc_msg_t;
 
 typedef struct job_info {

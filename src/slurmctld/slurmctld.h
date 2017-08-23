@@ -655,6 +655,10 @@ struct job_record {
 	uint32_t wait4switch; /* Maximum time to wait for minimum switches */
 	bool     best_switch; /* true=min number of switches met           */
 	time_t wait4switch_start; /* Time started waiting for switch       */
+#ifdef WF_API
+	struct wf_program_t *workflow_program;
+	struct wf_original_job_size_t *original_job_size;
+#endif
 };
 
 /* Job dependency specification, used in "depend_list" within job_record */
@@ -2068,5 +2072,11 @@ extern bool validate_operator(uid_t uid);
  */
 extern void cleanup_completing(struct job_record *);
 
+#ifdef WF_API
+extern job_desc_msg_t *
+copy_job_record_to_job_desc(struct job_record *job_ptr);
+
+extern void delete_job_desc_files(uint32_t job_id);
+#endif
 
 #endif /* !_HAVE_SLURMCTLD_H */

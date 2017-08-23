@@ -96,6 +96,11 @@
 #include "src/slurmctld/srun_comm.h"
 #include "src/slurmctld/state_save.h"
 #include "src/slurmctld/trigger_mgr.h"
+#include "src/unittests_lib/tools.h"
+
+#ifdef WF_API
+#include "src/slurmctld/wf_program.h"
+#endif
 
 #define DETAILS_FLAG 0xdddd
 #define SLURM_CREATE_JOB_FLAG_NO_ALLOCATE_0 0
@@ -333,6 +338,13 @@ static void _delete_job_desc_files(uint32_t job_id)
 	xstrcat(file_name, "/script");
 	(void) unlink(file_name);
 	xfree(file_name);
+
+#ifdef WF_API
+	file_name = xstrdup(dir_name);
+	xstrcat(file_name, "/wf_manifest");
+	(void) unlink(file_name);
+	xfree(file_name);
+#endif
 
 	if (stat(dir_name, &sbuf) == 0)	/* remove job directory as needed */
 		(void) rmdir(dir_name);
@@ -3240,6 +3252,11 @@ static struct job_record *_job_rec_copy(struct job_record *job_ptr,
 	details_new->std_out = xstrdup(job_details->std_out);
 	details_new->work_dir = xstrdup(job_details->work_dir);
 
+#ifdef WF_API
+	job_ptr_new->workflow_program =
+				copy_wf_program(job_ptr->workflow_program);
+#endif
+
 	return job_ptr_new;
 }
 
@@ -4933,6 +4950,16 @@ static int _job_create(job_desc_msg_t * job_desc, int allocate, int will_run,
 	FREE_NULL_LIST(license_list);
 	FREE_NULL_BITMAP(req_bitmap);
 	FREE_NULL_BITMAP(exc_bitmap);
+#ifdef WF_API
+	if (job_desc->wf_program) {
+		if (!parse_wf_program(job_desc->wf_program, &job_ptr->workflow_program)) {
+			free_wf_program(job_ptr->workflow_program);
+			error_code = ESLURM_FAILED_PARSING_WF_MANIFEST;
+			goto cleanup_fail;
+		}
+	}
+	job_ptr->original_job_size=NULL;
+#endif
 	return error_code;
 
 cleanup_fail:
@@ -5159,7 +5186,15 @@ _copy_job_desc_to_file(job_desc_msg_t * job_desc, uint32_t job_id)
 		error_code = _write_data_to_file(file_name, job_desc->script);
 		xfree(file_name);
 	}
-
+#ifdef WF_API
+	if (error_code == 0 && job_desc->wf_program!=NULL) {
+		/* Create script file */
+		file_name = xstrdup(dir_name);
+		xstrcat(file_name, "/wf_manifest");
+		error_code = _write_data_to_file(file_name, job_desc->wf_program);
+		xfree(file_name);
+	}
+#endif
 	xfree(dir_name);
 	END_TIMER2("_copy_job_desc_to_file");
 	return error_code;
@@ -5855,6 +5890,10 @@ _copy_job_desc_to_job_record(job_desc_msg_t * job_desc,
 	 */
 
 	detail_ptr->mc_ptr = _set_multi_core_data(job_desc);
+#ifdef WF_API
+	if (job_desc->wf_program!=NULL)
+		parse_wf_program(job_desc->wf_program, &job_ptr->workflow_program);
+#endif
 	*job_rec_ptr = job_ptr;
 	return SLURM_SUCCESS;
 }
@@ -6390,6 +6429,11 @@ static void _list_delete_job(void *job_entry)
 	select_g_select_jobinfo_free(job_ptr->select_jobinfo);
 	xfree(job_ptr->wckey);
 	job_count--;
+#ifdef WF_API
+	free_wf_program(job_ptr->workflow_program);
+	if (job_ptr->original_job_size!=NULL)
+		xfree(job_ptr->original_job_size);
+#endif
 	xfree(job_ptr);
 }
 
@@ -11768,6 +11812,19 @@ static void _pack_job_for_ckpt (struct job_record *job_ptr, Buf buffer)
 	slurm_free_job_desc_msg(job_desc);
 }
 
+#ifdef WF_API
+extern job_desc_msg_t *
+copy_job_record_to_job_desc(struct job_record *job_ptr) {
+	job_desc_msg_t* job_desc = _copy_job_record_to_job_desc(job_ptr);
+	job_desc->pn_min_memory=NO_VAL;
+	return job_desc;
+}
+
+extern void delete_job_desc_files(uint32_t job_id) {
+	_delete_job_desc_files(job_id);
+}
+#endif
+
 /*
  * _copy_job_record_to_job_desc - construct a job_desc_msg_t for a job.
  * IN job_ptr - the job record
@@ -11794,9 +11851,11 @@ _copy_job_record_to_job_desc(struct job_record *job_ptr)
 	 * job_desc->alloc_sid         = job_ptr->alloc_sid;
 	 */
 	job_desc->argc              = details->argc;
-	job_desc->argv              = xmalloc(sizeof(char *) * job_desc->argc);
-	for (i = 0; i < job_desc->argc; i ++)
-		job_desc->argv[i]   = xstrdup(details->argv[i]);
+	if (job_desc->argc>0) {
+		job_desc->argv              = xmalloc(sizeof(char *) * job_desc->argc);
+		for (i = 0; i < job_desc->argc; i ++)
+			job_desc->argv[i]   = xstrdup(details->argv[i]);
+	}
 	job_desc->begin_time        = details->begin_time;
 	job_desc->ckpt_interval     = job_ptr->ckpt_interval;
 	job_desc->ckpt_dir          = xstrdup(details->ckpt_dir);
@@ -11848,10 +11907,12 @@ _copy_job_record_to_job_desc(struct job_record *job_ptr)
 	else
 		job_desc->shared     = (uint16_t) NO_VAL;
 	job_desc->spank_job_env_size = job_ptr->spank_job_env_size;
-	job_desc->spank_job_env      = xmalloc(sizeof(char *) *
-					       job_desc->spank_job_env_size);
-	for (i = 0; i < job_desc->spank_job_env_size; i ++)
-		job_desc->spank_job_env[i]= xstrdup(job_ptr->spank_job_env[i]);
+	if (job_desc->spank_job_env_size) {
+		job_desc->spank_job_env      = xmalloc(sizeof(char *) *
+				job_desc->spank_job_env_size);
+		for (i = 0; i < job_desc->spank_job_env_size; i ++)
+			job_desc->spank_job_env[i]= xstrdup(job_ptr->spank_job_env[i]);
+	}
 	job_desc->std_err           = xstrdup(details->std_err);
 	job_desc->std_in            = xstrdup(details->std_in);
 	job_desc->std_out           = xstrdup(details->std_out);
@@ -11915,7 +11976,11 @@ _copy_job_record_to_job_desc(struct job_record *job_ptr)
 				    SELECT_JOBDATA_RAMDISK_IMAGE,
 				    &job_desc->ramdiskimage);
 #endif
-
+#ifdef WF_API
+	if (job_desc->wf_program!=NULL) {
+		job_desc->wf_program = xstrdup(job_ptr->workflow_program->manifest_text);
+	}
+#endif
 	return job_desc;
 }
 
