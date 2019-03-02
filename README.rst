@@ -2,17 +2,17 @@ ScSF+Woas
 --------------------------------------------------------
 
 This repository is a detached fork of Slurm with the ScSf
-simulator (<http://frieda.lbl.gov/scsf>) and WoAS, a Workflow Aware Schedulling
-technique (<http://frieda.lbl.gov/woas_scsf>).
+simulator (http://frieda.lbl.gov/scsf) and WoAS, a Workflow Aware Schedulling
+technique (http://frieda.lbl.gov/woas_scsf).
 
 ScSF was built over the 14-03-08-1 release of Slurm. This simulator deploys
 an live instance of Slurm on top of simualted resources. It also emulate
 user behavior by submitting jobs like users would. It is a fork from the
 origin Slurm simulator with adjustments to keep time consistent.
 
-All the changes are included in the `woasslurmsim` branch. To see the
+All the changes are included in the woasslurmsim branch. To see the
 differences in code visit this diff
-page (<https://github.com/gonzalorodrigo/ScSFSimulator/compare/14-03-8-1...woasslurmsim>)
+page (https://github.com/gonzalorodrigo/ScSFSimulator/compare/14-03-8-1...woasslurmsim)
 
 
 Slurm Workload Manager
